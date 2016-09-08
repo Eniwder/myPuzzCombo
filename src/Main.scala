@@ -1,6 +1,3 @@
-/**
-  * Created by toshiki on 2016/09/08.
-  */
 object Main extends App {
 
   type Board = Array[Array[Drop]]
