@@ -133,13 +133,13 @@ object Main extends App {
     val firstTop10 = states.map { s =>
       val result = applyBoard(replicateBoard(s.board))
       s.copy(combo = result._2)
-    }.sortBy(-_.combo).take(3000)
+    }.sortBy(-_.combo)
 
     def loop(s: Int, e: Int, top10: List[State]): List[State] = {
       if (s > e) {
         top10.sortBy(x => -(x.combo * 5 - x.route.size)).take(10)
       } else {
-        val nexts = (top10 ::: nextStates(top10.filter(_.route.size > s))).sortBy(x => -(x.combo * 5 - x.route.size)).take(3000)
+        val nexts = (top10 ::: nextStates(top10.filter(_.route.size > s))).sortBy(x => -(x.combo * 5 - x.route.size)).take(5000)
         loop(s + 1, e, nexts)
       }
     }
