@@ -4,22 +4,22 @@ object Main extends App {
 
   sealed trait Drop
   case object Fire extends Drop {
-    override def toString() = "火"
+    override def toString = "火"
   }
   case object Water extends Drop {
-    override def toString() = "水"
+    override def toString = "水"
   }
   case object Wood extends Drop {
-    override def toString() = "木"
+    override def toString = "木"
   }
   case object Light extends Drop {
-    override def toString() = "光"
+    override def toString = "光"
   }
   case object Dark extends Drop {
-    override def toString() = "闇"
+    override def toString = "闇"
   }
   case object Heart extends Drop {
-    override def toString() = "♡"
+    override def toString = "♡"
   }
   case object EFire extends Drop
   case object EWater extends Drop
@@ -35,37 +35,31 @@ object Main extends App {
 
   sealed trait Direction
   case object Up extends Direction {
-    override def toString() = "↑"
+    override def toString = "↑"
   }
   case object Down extends Direction {
-    override def toString() = "↓"
+    override def toString = "↓"
   }
   case object Right extends Direction {
-    override def toString() = "→"
+    override def toString = "→"
   }
   case object Left extends Direction {
-    override def toString() = "←"
+    override def toString = "←"
   }
-  case object Stop extends Direction {
-    override def toString() = "●"
-  }
+
   type Route = List[Direction]
 
   case class Hand(x: Int, y: Int)
 
   case class State(board: Board, hand: Hand, route: Route, combo: Int = 0) {
-    def startHand: Hand = {
-      var (x, y) = (hand.x, hand.y)
-      x += route.count(_ == Left)
-      x -= route.count(_ == Right)
-      y += route.count(_ == Up)
-      y -= route.count(_ == Down)
-      Hand(x, y)
-    }
+    def startHand: Hand =
+      Hand(hand.x + route.count(_ == Left) - route.count(_ == Right)
+        , hand.y + route.count(_ == Up) - route.count(_ == Down))
 
-    override def toString(): String = {
+
+    override def toString: String = {
       val sh = startHand
-      val josekiSh = (sh.x) + "" + (sh.y + 5)
+      val josekiSh = sh.x + "" + (sh.y + 5)
       // 格ゲー的12346789 が定石メーカーだとこうなる→ 01234789
       val josekiRoute = route.reverse.collect {
         case Up => 6
@@ -73,9 +67,11 @@ object Main extends App {
         case Right => 4
         case Left => 3
       } mkString ""
+
       s"combo:$combo start:(${sh.x + 1},${sh.y + 1}) 手数:${route.size}\troute:${route.reverse.mkString(" ")}\n" +
         s"http://serizawa.web5.jp/puzzdra_theory_maker/index.html?layout=$joseki&route=$josekiSh,$josekiRoute"
     }
+
 
   }
 
@@ -108,18 +104,17 @@ object Main extends App {
   println(board.toList.map(_.toList.mkString(" ")).mkString("\n"))
   println()
 
-  val states = getOptimumRoute(board)
-  val comboGroup = states.groupBy(_.combo)
-  val result = for (g <- comboGroup.values) yield {
-    val minMoveState = g.minBy(_.route.size)
-    for (s <- g if s == minMoveState || !s.route.mkString("").contains(minMoveState.route.mkString(""))) yield s
-  }
+  val start = System.currentTimeMillis
 
-  println(result.flatten.toList.sortBy(-_.combo).mkString("\n"))
+  val result = getOptimumRoute(board)
+
+  println(result.mkString("\n"))
   //println(states.mkString("\n"))
-
+  println(System.currentTimeMillis() - start + "msec")
 
   def getOptimumRoute(startBoard: Board): List[State] = {
+    val Order = (s: State) => -(s.combo * 7 - s.route.size)
+
     val firstStates = for (x <- 0 to 5; y <- 0 to 4) yield {
       var buf = scala.collection.mutable.Buffer.empty[State]
       if (x != 0) buf += State(move(board, x, y, Left), Hand(x - 1, y), List(Left))
@@ -135,32 +130,39 @@ object Main extends App {
       s.copy(combo = result._2)
     }.sortBy(-_.combo)
 
-    def loop(s: Int, e: Int, top10: List[State]): List[State] = {
+    def loop(s: Int, e: Int, top10: List[State]): List[State] =
       if (s > e) {
-        top10.sortBy(x => -(x.combo * 5 - x.route.size)).take(10)
+        val comboGroup = top10.groupBy(_.combo)
+        val result = for (g <- comboGroup.values) yield {
+          val minMoveState = g.minBy(_.route.size)
+          for (s <- g if s == minMoveState || !s.route.mkString("").contains(minMoveState.route.mkString("").take(minMoveState.route.mkString("").length * 0.6.toInt))) yield s
+        }
+        result.flatten.toList.sortBy(Order).take(10)
       } else {
-        val nexts = (top10 ::: nextStates(top10.filter(_.route.size > s))).sortBy(x => -(x.combo * 5 - x.route.size)).take(5000)
-        loop(s + 1, e, nexts)
+        val states = if (s < 7) (top10 ::: nextStates(top10.filter(_.route.size > s))).sortBy(Order)
+        else (top10 ::: nextStates(top10.filter(_.route.size > s))).sortBy(Order).take(10000)
+        loop(s + 1, e, states)
       }
-    }
 
-    loop(0, 60, firstTop10)
+    loop(0, 40, firstTop10)
   }
 
   def nextStates(states: List[State]): List[State] = {
-    val ret = for (s <- states) yield {
-      val buf = scala.collection.mutable.Buffer.empty[State]
-      val (x, y, head) = (s.hand.x, s.hand.y, s.route.head)
-      if (x != 0 && head != Right) buf += State(move(s.board, x, y, Left), Hand(x - 1, y), Left :: s.route)
-      if (x != 5 && head != Left) buf += State(move(s.board, x, y, Right), Hand(x + 1, y), Right :: s.route)
-      if (y != 0 && head != Down) buf += State(move(s.board, x, y, Up), Hand(x, y - 1), Up :: s.route)
-      if (y != 4 && head != Up) buf += State(move(s.board, x, y, Down), Hand(x, y + 1), Down :: s.route)
-      buf
+    val ret = states.par.collect {
+      case s: State =>
+        val buf = scala.collection.mutable.Buffer.empty[State]
+        val (x, y, head) = (s.hand.x, s.hand.y, s.route.head)
+        if (x != 0 && head != Right) buf += State(move(s.board, x, y, Left), Hand(x - 1, y), Left :: s.route)
+        if (x != 5 && head != Left) buf += State(move(s.board, x, y, Right), Hand(x + 1, y), Right :: s.route)
+        if (y != 0 && head != Down) buf += State(move(s.board, x, y, Up), Hand(x, y - 1), Up :: s.route)
+        if (y != 4 && head != Up) buf += State(move(s.board, x, y, Down), Hand(x, y + 1), Down :: s.route)
+        buf
     }
+
     ret.flatten.map { s =>
       val result = applyBoard(replicateBoard(s.board))
       s.copy(combo = result._2)
-    }
+    } toList
   }
 
   def move(board: Board, x: Int, y: Int, direction: Direction): Board = {
